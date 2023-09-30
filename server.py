@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import math
 import requests
+from io import BytesIO
 
 main_data_dir = os.getcwd() + "/Segmented Medicinal Leaf Images"
 batch_size = 3
@@ -92,8 +93,8 @@ preprocessed_image = load_and_preprocess_image(image_path)
 
 
 # model.save('plant_identification_model2.h5')
-base_url = 'http://192.168.97.49:3000/uploads/'
-image_path = 'http://192.168.97.49:3000/uploads/asd.jpg'
+base_url = 'http://192.168.56.1:3000/uploads/'
+image_path = 'http://192.168.56.1:3000/uploads/asd.jpg'
 
 model = tf.keras.models.load_model('plant_identification_model2.h5')
 
@@ -108,6 +109,20 @@ def preprocess_image(image_path):
     image_array = np.expand_dims(image, axis=0)
     preprocessed_image = preprocess_input(image_array)
     return preprocessed_image
+
+
+def download_image(url, save_path):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            with open(save_path, 'wb') as file:
+                file.write(response.content)
+            print(f"Image downloaded successfully to {save_path}")
+        else:
+            print(
+                f"Failed to download image. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"Error downloading image: {str(e)}")
 
 # Perform prediction
 
@@ -128,7 +143,8 @@ global label_mapping
 label_mapping = {i: label for i, label in enumerate(
     sorted(os.listdir(main_data_dir)))}
 # Provide the path to the image you want to classify
-image_path = './leaf.jpg'  # Replace with the path to your image
+# Replace with the path to your image
+image_path = './leaf.jpg'
 predicted_label, confidence = predict_plant(image_path, label_mapping)
 
 # Print the prediction
@@ -142,17 +158,49 @@ if confidence == 0.15:
 app = Flask(__name__)
 
 
-@app.route('/api/process_image', methods=['POST'])
-def process_image():
+@app.route('/api/process_capture', methods=['POST'])
+def process_capture():
 
     data = request.get_json()
     image_url = data.get('imageUrl')
+    print(image_url)
     print(data['imgName']['imageName'])
     imgName = data['imgName']['imageName']
     url = base_url+imgName
     response = requests.get(url)
-    with open(imgName, "wb") as f:
+    with open("img_capture.jpeg", "wb") as f:
         f.write(response.content)
+
+    predicted_label, confidence = predict_plant(
+        f"./img_capture.jpeg", label_mapping)
+    print("N", predicted_label, confidence)
+    # Add your image processing code here
+    # You can run your functions on the image URL and generate a JSON response
+    print(type(confidence))
+    print(type(predicted_label))
+    sci_name, name = predicted_label.split("(")
+    # For demonstration purposes, we'll return a JSON response with status code 200
+    response_data = {
+        'name': name[:-1],
+        'sci_name': sci_name,
+        'confidence': str(confidence),
+    }
+
+    return jsonify(response_data)
+
+
+@app.route('/api/process_submit', methods=['POST'])
+def process_submit():
+
+    data = request.get_json()
+    image_url = data.get('imageUrl')
+    print(data['imgUrl']['imageUrl'])
+    imgName = data["imgName"]["imageName"]
+    imgUrl = data['imgUrl']['imageUrl']
+    print(imgName, imgUrl)
+    image_url = imgUrl
+    save_path = f"./{imgName}"
+    download_image(image_url, save_path)
 
     predicted_label, confidence = predict_plant(f"./{imgName}", label_mapping)
     print("N", predicted_label, confidence)
@@ -177,4 +225,4 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(host='192.168.97.104', port=5000, debug=True)
+    app.run(host='192.168.56.1', port=5000, debug=True)
